@@ -1,0 +1,44 @@
+{
+  "image": "gcr.io/tu-gcp-project-id/bancopel/load-bigquery-flex-template:latest",
+  "sdk_info": {
+    "language": "JAVA"
+  },
+  "metadata": {
+    "name": "Bancopel Load BigQuery",
+    "description": "Plantilla para cargar archivos JSON a BigQuery.",
+    "parameters": [
+      {
+        "name": "input",
+        "label": "Patrón de archivos de entrada en GCS",
+        "help_text": "La ruta y patrón de los archivos a procesar. Ejemplo: gs://bucket/raw/*.json"
+      },
+      {
+        "name": "bqTable",
+        "label": "Tabla de BigQuery de destino",
+        "help_text": "La tabla de BigQuery donde se cargarán los datos. Formato: proyecto:dataset.tabla"
+      },
+      {
+        "name": "bqTempLocation",
+        "label": "Ubicación temporal de BigQuery en GCS",
+        "help_text": "Una carpeta en GCS que BigQuery puede usar para archivos temporales."
+      },
+      {
+        "name": "deadletter",
+        "label": "Prefijo para fallos de parseo en GCS",
+        "help_text": "El prefijo en GCS para guardar los registros que no se pudieron procesar. Ejemplo: gs://bucket/deadletter/"
+      },
+      {
+        "name": "errorTable",
+        "label": "Tabla de BigQuery para errores",
+        "help_text": "La tabla de BigQuery donde se guardarán los registros de errores. Formato: proyecto:dataset.tabla",
+        "is_optional": false
+      },
+      {
+        "name": "localOutput",
+        "label": "Ruta de salida local para validación",
+        "help_text": "Si se especifica, se escribirá la salida a archivos locales en lugar de a BigQuery. Útil para debugging.",
+        "is_optional": true
+      }
+    ]
+  }
+}
