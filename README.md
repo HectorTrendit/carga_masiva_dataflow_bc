@@ -67,7 +67,7 @@ gcloud dataflow flex-template run "load-bq-$(date +%Y%m%d-%H%M%S)"
     --project "${GCP_PROJECT}" 
     --region "us-central1" 
     --parameters 
-input="gs://tu-bucket-de-datos/entrada/*.json",bqTable="${GCP_PROJECT}:tu_dataset.tu_tabla",bqTempLocation="gs://${GCS_BUCKET}/temp/",deadletter="gs://${GCS_BUCKET}/deadletter/",errorTable="${GCP_PROJECT}:tu_dataset.tabla_errores"
+input="gs://tu-bucket-de-datos/entrada/*.json",bqTable="${GCP_PROJECT}:tu_dataset.tu_tabla",bqTempLocation="gs://${GCS_BUCKET}/temp/",errorTable="${GCP_PROJECT}:tu_dataset.tabla_errores"
 ```
 
 ### Control Total

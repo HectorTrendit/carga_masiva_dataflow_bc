@@ -12,7 +12,6 @@ import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.values.TupleTag;
 
 public class CheckSchemaFn extends DoFn<Paso1Record, Paso1Record> {
-  private static final ObjectMapper MAPPER = new ObjectMapper(new JsonFactory());
 
   private final TupleTag<DeadletterRecord> deadTag;
   private final List<String> allowedFields;
@@ -38,34 +37,12 @@ public class CheckSchemaFn extends DoFn<Paso1Record, Paso1Record> {
     }
 
     try {
-      JsonNode node = MAPPER.readTree(payload);
-      if (!node.isObject()) {
+      String trimmed = payload.trim();
+      if (!trimmed.startsWith("{")) {
         c.output(deadTag, new DeadletterRecord(
             record.getSourceFile(),
             null,
             "payload_not_object",
-            "schema",
-            Instant.now().toString(),
-            payload
-        ));
-        return;
-      }
-
-      List<String> unknown = new ArrayList<>();
-      node.fieldNames().forEachRemaining(name -> {
-        if (!allowedSet.contains(name)) {
-          if (unknown.size() < 50) {
-            unknown.add(name);
-          }
-        }
-      });
-
-      if (!unknown.isEmpty()) {
-        String msg = "unknown_fields:" + String.join(",", unknown);
-        c.output(deadTag, new DeadletterRecord(
-            record.getSourceFile(),
-            null,
-            msg,
             "schema",
             Instant.now().toString(),
             payload

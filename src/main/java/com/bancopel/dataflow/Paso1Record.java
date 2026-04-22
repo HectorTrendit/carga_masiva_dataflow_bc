@@ -14,59 +14,7 @@ public class Paso1Record implements Serializable {
   private static final ObjectMapper MAPPER = new ObjectMapper(new JsonFactory());
   private static final List<String> ARRAY_FIELDS = Arrays.asList(
       "rawLogIds",
-      "rawLogs",
-      "ioc_domain",
-      "ioc_md5",
-      "ioc_ip_v4",
-      "ioc_fields",
-      "ioc_types",
-      "ioc_sources",
-      "merged_msg_types",
-      "added_permissions",
-      "added_users",
-      "allowed_data_actions",
-      "allowed_ids",
-      "allowed_permissions",
-      "allowed_resources",
-      "allowed_uris",
-      "allowed_user_types",
-      "allowed_users",
-      "analyzers",
-      "apps",
-      "assigned_apps",
-      "attributes",
-      "block_public_acls",
-      "block_public_policy",
-      "categories",
-      "category_ids",
-      "collaborators",
-      "denied_data_actions",
-      "denied_permissions",
-      "denied_resources",
-      "denied_users",
-      "email_attachments",
-      "email_attachments_bytes",
-      "email_dlp_policy_names",
-      "email_recipients",
-      "email_urls",
-      "file_permissions",
-      "asset_labels",
-      "members",
-      "mitre_labels",
-      "modified_keys",
-      "module_hash_names",
-      "privileges",
-      "profiles",
-      "recipients",
-      "removed_permissions",
-      "removed_users",
-      "reply_to",
-      "role_permissions",
-      "rule_usecases",
-      "tags",
-      "transistive_tags",
-      "users",
-      "invalidFields"
+      "rawLogs"
   );
 
   private final String id;
@@ -82,6 +30,7 @@ public class Paso1Record implements Serializable {
   private final List<String> rawLogs;
   private final String metadataJson;
   private final String eventDebugJson;
+  private final String customFieldsJson;
   private final String payload;
   private final String sourceFile;
 
@@ -99,6 +48,7 @@ public class Paso1Record implements Serializable {
       List<String> rawLogs,
       String metadataJson,
       String eventDebugJson,
+      String customFieldsJson,
       String payload,
       String sourceFile) {
     this.id = id;
@@ -114,6 +64,7 @@ public class Paso1Record implements Serializable {
     this.rawLogs = rawLogs;
     this.metadataJson = metadataJson;
     this.eventDebugJson = eventDebugJson;
+    this.customFieldsJson = customFieldsJson;
     this.payload = payload;
     this.sourceFile = sourceFile;
   }
@@ -170,6 +121,10 @@ public class Paso1Record implements Serializable {
     return eventDebugJson;
   }
 
+  public String getCustomFieldsJson() {
+    return customFieldsJson;
+  }
+
   public String getPayload() {
     return payload;
   }
@@ -180,14 +135,6 @@ public class Paso1Record implements Serializable {
 
   public TableRow toTableRow() {
     TableRow row = new TableRow();
-    if (payload != null && !payload.isEmpty()) {
-      try {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = MAPPER.readValue(payload, Map.class);
-        row.putAll(map);
-      } catch (Exception ignored) {
-      }
-    }
 
     row.set("id", id);
     row.set("approxLogTime", approxLogTime);
@@ -201,9 +148,9 @@ public class Paso1Record implements Serializable {
     row.set("rawLogIds", rawLogIds);
     row.set("rawLogs", rawLogs);
 
-    row.set("customFieldsJSON", toJsonString(row.get("customFieldsJSON")));
-    row.set("metadataFieldsJSON", toJsonString(row.get("metadataFieldsJSON")));
-    row.set("event_debug_info", toJsonString(row.get("event_debug_info")));
+    row.set("customFieldsJSON", customFieldsJson);
+    row.set("metadataFieldsJSON", metadataJson);
+    row.set("event_debug_info", eventDebugJson);
 
     coerceArrayFields(row);
 
@@ -267,6 +214,7 @@ public class Paso1Record implements Serializable {
         && Objects.equals(rawLogs, that.rawLogs)
         && Objects.equals(metadataJson, that.metadataJson)
         && Objects.equals(eventDebugJson, that.eventDebugJson)
+        && Objects.equals(customFieldsJson, that.customFieldsJson)
         && Objects.equals(payload, that.payload)
         && Objects.equals(sourceFile, that.sourceFile);
   }
@@ -287,6 +235,7 @@ public class Paso1Record implements Serializable {
         rawLogs,
         metadataJson,
         eventDebugJson,
+        customFieldsJson,
         payload,
         sourceFile
     );

@@ -1,9 +1,12 @@
 package com.bancopel.dataflow;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -20,20 +23,55 @@ public final class Paso1RecordMapper {
       .optionalEnd()
       .toFormatter();
 
-  private Paso1RecordMapper() {}
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  public static Paso1Record fromJson(JsonNode obj, String source) {
-    String approxLogTime = parseTs(textOf(obj, "approxLogTime"));
-    String ingestTime = parseTs(textOf(obj, "ingest_time"));
-    String collectorTs = parseTs(textOf(obj, "collector_timestamp"));
-    String rowCreateTime = parseTs(textOf(obj, "row_create_time"));
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public static class RawPayload {
+    public Object id;
+    public Object approxLogTime;
+    @JsonProperty("ingest_time")
+    public Object ingestTime;
+    @JsonProperty("collector_timestamp")
+    public Object collectorTimestamp;
+    @JsonProperty("row_create_time")
+    public Object rowCreateTime;
+    public Object tier;
+    @JsonProperty("raw_log_size")
+    public Object rawLogSize;
+    public Object parsed;
+    public Object rawLogIds;
+    public Object rawLogs;
+    @JsonProperty("metadataFieldsJSON")
+    public Object metadataFieldsJSON;
+    @JsonProperty("event_debug_info")
+    public Object eventDebugInfo;
+    @JsonProperty("customFieldsJSON")
+    public Object customFieldsJSON;
+  }
+
+  private Paso1RecordMapper() {}
+  public static Paso1Record fromJson(String line, String source) throws Exception {
+    RawPayload obj = MAPPER.readValue(line, RawPayload.class);
+    
+    String approxLogTime = parseTs(textOf(obj.approxLogTime));
+    String ingestTime = parseTs(textOf(obj.ingestTime));
+    String collectorTs = parseTs(textOf(obj.collectorTimestamp));
+    String rowCreateTime = parseTs(textOf(obj.rowCreateTime));
     String ingestDate = null;
     if (ingestTime != null && ingestTime.length() >= 10) {
       ingestDate = ingestTime.substring(0, 10);
+    } else if (collectorTs != null) {
+      try {
+        ingestDate = Instant.parse(collectorTs)
+            .atZone(ZoneId.of("America/Mexico_City"))
+            .toLocalDate()
+            .toString();
+      } catch (DateTimeParseException ignored) {
+      }
     }
 
     Long rawLogSize = null;
-    String rawLogSizeText = textOf(obj, "raw_log_size");
+    String rawLogSizeText = textOf(obj.rawLogSize);
     if (rawLogSizeText != null) {
       try {
         rawLogSize = Long.parseLong(rawLogSizeText);
@@ -43,20 +81,21 @@ public final class Paso1RecordMapper {
     }
 
     return new Paso1Record(
-        textOf(obj, "id"),
+        textOf(obj.id),
         approxLogTime,
         ingestTime,
         ingestDate,
         collectorTs,
         rowCreateTime,
-        textOf(obj, "tier"),
+        textOf(obj.tier),
         rawLogSize,
-        booleanValue(obj, "parsed"),
-        arrayText(obj, "rawLogIds"),
-        arrayText(obj, "rawLogs"),
-        obj.path("metadataFieldsJSON").toString(),
-        obj.path("event_debug_info").toString(),
-        obj.toString(),
+        booleanValue(obj.parsed),
+        arrayText(obj.rawLogIds),
+        arrayText(obj.rawLogs),
+        jsonOf(obj.metadataFieldsJSON),
+        jsonOf(obj.eventDebugInfo),
+        jsonOf(obj.customFieldsJSON),
+        line,
         source
     );
   }
@@ -72,17 +111,19 @@ public final class Paso1RecordMapper {
     );
   }
 
-  public static DeadletterRecord deadletterWithPayload(
-      String source, long index, Exception e, JsonNode payload) {
+  public static DeadletterRecord deadletterWithRaw(
+      String source, long index, Exception e, String rawText) {
     return new DeadletterRecord(
         source,
         index,
         e.toString(),
-        "map",
+        "parse",
         Instant.now().toString(),
-        payload == null ? null : payload.toString()
+        rawText
     );
   }
+
+
 
   private static String parseTs(String value) {
     if (value == null || value.isEmpty()) {
@@ -108,31 +149,38 @@ public final class Paso1RecordMapper {
     return null;
   }
 
-  private static String textOf(JsonNode obj, String field) {
-    JsonNode node = obj.get(field);
-    if (node == null || node.isNull()) {
-      return null;
-    }
-    return node.asText();
+  private static String textOf(Object val) {
+    if (val == null) return null;
+    return String.valueOf(val);
   }
 
-  private static Boolean booleanValue(JsonNode obj, String field) {
-    JsonNode node = obj.get(field);
-    if (node == null || node.isNull()) {
-      return null;
-    }
-    return node.asBoolean();
+  private static Boolean booleanValue(Object val) {
+    if (val == null) return null;
+    if (val instanceof Boolean) return (Boolean) val;
+    String text = String.valueOf(val).toLowerCase();
+    return "true".equals(text) || "1".equals(text);
   }
 
-  private static List<String> arrayText(JsonNode obj, String field) {
-    JsonNode node = obj.get(field);
-    if (node == null || !node.isArray()) {
-      return Collections.emptyList();
+  private static List<String> arrayText(Object val) {
+    if (val == null) return Collections.emptyList();
+    if (val instanceof List) {
+      List<?> list = (List<?>) val;
+      List<String> out = new ArrayList<>(list.size());
+      for (Object item : list) {
+        out.add(item == null ? null : String.valueOf(item));
+      }
+      return out;
     }
-    List<String> out = new ArrayList<>(node.size());
-    for (int i = 0; i < node.size(); i++) {
-      out.add(node.get(i).asText());
+    return Collections.singletonList(String.valueOf(val));
+  }
+  
+  private static String jsonOf(Object val) {
+    if (val == null) return null;
+    if (val instanceof String) return (String) val;
+    try {
+      return MAPPER.writeValueAsString(val);
+    } catch (Exception e) {
+      return String.valueOf(val);
     }
-    return out;
   }
 }

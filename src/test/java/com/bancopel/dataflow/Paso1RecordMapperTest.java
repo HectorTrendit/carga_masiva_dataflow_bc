@@ -25,9 +25,7 @@ public class Paso1RecordMapperTest {
         "\"event_debug_info\":{}" +
         "}";
 
-    ObjectMapper mapper = new ObjectMapper();
-    JsonNode node = mapper.readTree(json);
-    Paso1Record record = Paso1RecordMapper.fromJson(node, "gs://bucket/file.json");
+    Paso1Record record = Paso1RecordMapper.fromJson(json, "gs://bucket/file.json");
 
     assertEquals("1", record.getId());
     assertEquals("Tier 4", record.getTier());

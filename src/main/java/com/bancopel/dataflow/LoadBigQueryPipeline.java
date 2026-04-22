@@ -1,12 +1,5 @@
 package com.bancopel.dataflow;
 
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.api.services.bigquery.model.Clustering;
-import com.google.api.services.bigquery.model.TableFieldSchema;
-import com.google.api.services.bigquery.model.TableSchema;
-import com.google.api.services.bigquery.model.TableRow;
-import com.google.api.services.bigquery.model.TimePartitioning;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -14,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.FileIO;
 import org.apache.beam.sdk.io.TextIO;
@@ -30,6 +24,14 @@ import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
 import org.apache.beam.sdk.values.TypeDescriptor;
 import org.apache.beam.sdk.values.TypeDescriptors;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.api.services.bigquery.model.Clustering;
+import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableSchema;
+import com.google.api.services.bigquery.model.TimePartitioning;
 
 public class LoadBigQueryPipeline {
 
@@ -63,62 +65,8 @@ public class LoadBigQueryPipeline {
         field("customFieldsJSON", "STRING"),
         field("metadataFieldsJSON", "STRING"),
         field("event_debug_info", "STRING"),
-        field("ioc_domain", "STRING", "REPEATED"),
-        field("ioc_md5", "STRING", "REPEATED"),
-        field("ioc_ip_v4", "STRING", "REPEATED"),
-        field("ioc_fields", "STRING", "REPEATED"),
-        field("ioc_types", "STRING", "REPEATED"),
-        field("ioc_sources", "STRING", "REPEATED"),
-        field("merged_msg_types", "STRING", "REPEATED"),
-        field("parser_version", "STRING"),
-        field("added_permissions", "STRING", "REPEATED"),
-        field("added_users", "STRING", "REPEATED"),
-        field("allowed_data_actions", "STRING", "REPEATED"),
-        field("allowed_ids", "STRING", "REPEATED"),
-        field("allowed_permissions", "STRING", "REPEATED"),
-        field("allowed_resources", "STRING", "REPEATED"),
-        field("allowed_uris", "STRING", "REPEATED"),
-        field("allowed_user_types", "STRING", "REPEATED"),
-        field("allowed_users", "STRING", "REPEATED"),
-        field("analyzers", "STRING", "REPEATED"),
-        field("apps", "STRING", "REPEATED"),
-        field("assigned_apps", "STRING", "REPEATED"),
-        field("attributes", "STRING", "REPEATED"),
-        field("block_public_acls", "STRING", "REPEATED"),
-        field("block_public_policy", "STRING", "REPEATED"),
-        field("categories", "STRING", "REPEATED"),
-        field("category_ids", "STRING", "REPEATED"),
-        field("collaborators", "STRING", "REPEATED"),
-        field("denied_data_actions", "STRING", "REPEATED"),
-        field("denied_permissions", "STRING", "REPEATED"),
-        field("denied_resources", "STRING", "REPEATED"),
-        field("denied_users", "STRING", "REPEATED"),
-        field("email_attachments", "STRING", "REPEATED"),
-        field("email_attachments_bytes", "STRING", "REPEATED"),
-        field("email_dlp_policy_names", "STRING", "REPEATED"),
-        field("email_recipients", "STRING", "REPEATED"),
-        field("email_urls", "STRING", "REPEATED"),
-        field("file_permissions", "STRING", "REPEATED"),
-        field("asset_labels", "STRING", "REPEATED"),
-        field("members", "STRING", "REPEATED"),
-        field("mitre_labels", "STRING", "REPEATED"),
-        field("modified_keys", "STRING", "REPEATED"),
-        field("module_hash_names", "STRING", "REPEATED"),
-        field("privileges", "STRING", "REPEATED"),
-        field("profiles", "STRING", "REPEATED"),
-        field("recipients", "STRING", "REPEATED"),
-        field("removed_permissions", "STRING", "REPEATED"),
-        field("removed_users", "STRING", "REPEATED"),
-        field("reply_to", "STRING", "REPEATED"),
-        field("role_permissions", "STRING", "REPEATED"),
-        field("rule_usecases", "STRING", "REPEATED"),
-        field("tags", "STRING", "REPEATED"),
-        field("transistive_tags", "STRING", "REPEATED"),
-        field("users", "STRING", "REPEATED"),
-        field("invalidFields", "STRING", "REPEATED"),
         field("payload", "STRING"),
-        field("source_file", "STRING")
-    ));
+        field("source_file", "STRING")));
   }
 
   private static TableSchema errorSchema() {
@@ -128,8 +76,7 @@ public class LoadBigQueryPipeline {
         field("error", "STRING"),
         field("stage", "STRING"),
         field("timestamp", "TIMESTAMP"),
-        field("payload", "STRING")
-    ));
+        field("payload", "STRING")));
   }
 
   private static List<String> expectedFieldOrder() {
@@ -226,8 +173,10 @@ public class LoadBigQueryPipeline {
     PCollection<Paso1Record> main = parsed.get(parseAndValidate.getMainTag());
     PCollection<DeadletterRecord> deadletters = parsed.get(parseAndValidate.getDeadTag());
 
-    TupleTag<Paso1Record> schemaMainTag = new TupleTag<Paso1Record>() {};
-    TupleTag<DeadletterRecord> schemaDeadTag = new TupleTag<DeadletterRecord>() {};
+    TupleTag<Paso1Record> schemaMainTag = new TupleTag<Paso1Record>() {
+    };
+    TupleTag<DeadletterRecord> schemaDeadTag = new TupleTag<DeadletterRecord>() {
+    };
     PCollectionTuple schemaChecked = main.apply("CheckSchema",
         ParDo.of(new CheckSchemaFn(schemaDeadTag, expectedFieldOrder()))
             .withOutputTags(schemaMainTag, TupleTagList.of(schemaDeadTag)));
@@ -257,7 +206,9 @@ public class LoadBigQueryPipeline {
           .apply("WriteBQ", BigQueryIO.writeTableRows()
               .to(options.getBqTable())
               .withSchema(bqSchema)
-              .withMethod(Method.FILE_LOADS)
+              .withMethod(Method.STORAGE_WRITE_API)
+              // Habilitar auto-sharding para manejar el volumen masivo de 400 TB
+              .withNumStorageWriteApiStreams(0) 
               .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
               .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
               .withCustomGcsTempLocation(options.getBqTempLocation())
@@ -265,6 +216,11 @@ public class LoadBigQueryPipeline {
               .withClustering(clustering));
     }
 
+    TimePartitioning errorPartitioning = new TimePartitioning()
+        .setType("DAY")
+        .setField("timestamp");
+
+    Clustering errorClustering = new Clustering().setFields(Arrays.asList("source_file"));
     deadletters
         .apply("DeadletterToTableRow", MapElements.into(TypeDescriptor.of(TableRow.class))
             .via((DeadletterRecord r) -> new TableRow()
@@ -277,30 +233,17 @@ public class LoadBigQueryPipeline {
         .apply("WriteDeadletterBQ", BigQueryIO.writeTableRows()
             .to(options.getErrorTable())
             .withSchema(errorSchema())
-            .withMethod(Method.FILE_LOADS)
+            .withMethod(Method.STORAGE_WRITE_API)
+            .withNumStorageWriteApiStreams(0)
             .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
             .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_APPEND)
-            .withCustomGcsTempLocation(options.getBqTempLocation()));
-
-    if (options.getDeadletter() != null && options.getDeadletter().get() != null && !options.getDeadletter().get().isEmpty()) {
-      deadletters
-          .apply("DeadletterToJson", MapElements.into(TypeDescriptors.strings())
-              .via((DeadletterRecord r) -> {
-                try {
-                  return MAPPER.writeValueAsString(r);
-                } catch (Exception e) {
-                  return "{\"error\":\"deadletter_serialization_failed\"}";
-                }
-              }))
-          .apply("WriteDeadletter", TextIO.write()
-              .to(options.getDeadletter())
-              .withSuffix(".jsonl"));
-    }
+            .withCustomGcsTempLocation(options.getBqTempLocation())
+            .withTimePartitioning(errorPartitioning)
+            .withClustering(errorClustering));
   }
 
   public static void main(String[] args) {
-    LoadBigQueryOptions options =
-        PipelineOptionsFactory.fromArgs(args).withValidation().as(LoadBigQueryOptions.class);
+    LoadBigQueryOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().as(LoadBigQueryOptions.class);
     Pipeline p = Pipeline.create(options);
     buildPipeline(p, options);
     p.run();
