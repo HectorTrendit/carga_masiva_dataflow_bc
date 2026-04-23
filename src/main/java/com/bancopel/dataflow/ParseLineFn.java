@@ -25,7 +25,7 @@ public class ParseLineFn extends DoFn<String, Paso1Record> {
     } catch (Exception e) {
       // In a line-based processing, we don't have the original index easily unless we pass it.
       // For now, using 0 or a placeholder.
-      c.output(deadTag, Paso1RecordMapper.deadletterWithRaw(source, 0L, e, line));
+      c.output(deadTag, Paso1RecordMapper.deadletter(source, 0L, e, line));
     }
   }
 }

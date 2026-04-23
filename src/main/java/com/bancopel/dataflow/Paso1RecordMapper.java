@@ -1,8 +1,5 @@
 package com.bancopel.dataflow;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -14,6 +11,11 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class Paso1RecordMapper {
   private static final DateTimeFormatter FLEXIBLE_TS = new DateTimeFormatterBuilder()
@@ -52,7 +54,16 @@ public final class Paso1RecordMapper {
   private Paso1RecordMapper() {}
   public static Paso1Record fromJson(String line, String source) throws Exception {
     RawPayload obj = MAPPER.readValue(line, RawPayload.class);
-    
+    return buildRecord(obj, source, line);
+  }
+
+  public static Paso1Record fromJson(JsonNode node, String source) throws Exception {
+    String line = node.toString();
+    RawPayload obj = MAPPER.readValue(line, RawPayload.class);
+    return buildRecord(obj, source, line);
+  }
+
+  private static Paso1Record buildRecord(RawPayload obj, String source, String line) throws Exception {
     String approxLogTime = parseTs(textOf(obj.approxLogTime));
     String ingestTime = parseTs(textOf(obj.ingestTime));
     String collectorTs = parseTs(textOf(obj.collectorTimestamp));
@@ -100,24 +111,20 @@ public final class Paso1RecordMapper {
     );
   }
 
-  public static DeadletterRecord deadletter(String source, long index, Exception e) {
-    return new DeadletterRecord(
-        source,
-        index,
-        e.toString(),
-        "parse",
-        Instant.now().toString(),
-        null
-    );
+  public static DeadletterRecord deadletter(String source, Long index, Exception e) {
+    return deadletter(source, index, e, null, "parse");
   }
 
-  public static DeadletterRecord deadletterWithRaw(
-      String source, long index, Exception e, String rawText) {
+  public static DeadletterRecord deadletter(String source, Long index, Exception e, String rawText) {
+    return deadletter(source, index, e, rawText, "parse");
+  }
+
+  public static DeadletterRecord deadletter(String source, Long index, Exception e, String rawText, String stage) {
     return new DeadletterRecord(
         source,
         index,
         e.toString(),
-        "parse",
+        stage,
         Instant.now().toString(),
         rawText
     );
