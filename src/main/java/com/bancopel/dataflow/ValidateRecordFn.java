@@ -17,46 +17,44 @@ public class ValidateRecordFn extends DoFn<Paso1Record, Paso1Record> {
   @ProcessElement
   public void processElement(ProcessContext c) {
     Paso1Record record = c.element();
-
-    if (isBlank(record.getId())) {
-      c.output(deadTag, buildDead(record, "id_missing"));
-      return;
-    }
-
-    if (isBlank(record.getTier())) {
-      c.output(deadTag, buildDead(record, "tier_missing"));
-      return;
-    }
-
-    String payload = record.getPayload();
-    if (isBlank(payload)) {
-      c.output(deadTag, buildDead(record, "payload_missing"));
-      return;
-    }
-
-    String ingestDate = record.getIngestDate();
-    if (isBlank(ingestDate)) {
-      c.output(deadTag, buildDead(record, "ingest_date_missing"));
-      return;
-    }
-
-    try {
-      LocalDate.parse(ingestDate);
-    } catch (DateTimeParseException e) {
-      c.output(deadTag, buildDead(record, "ingest_date_invalid"));
-      return;
-    }
-
-    Long rawLogSize = record.getRawLogSize();
-    if (rawLogSize != null && rawLogSize < 0) {
-      c.output(deadTag, buildDead(record, "raw_log_size_negative"));
+    String reason = validationError(record);
+    if (reason != null) {
+      c.output(deadTag, buildDead(record, reason));
       return;
     }
 
     c.output(record);
   }
 
-  private DeadletterRecord buildDead(Paso1Record record, String reason) {
+  public static String validationError(Paso1Record record) {
+    if (record == null) {
+      return "record_missing";
+    }
+    if (isBlank(record.getId())) {
+      return "id_missing";
+    }
+    if (isBlank(record.getTier())) {
+      return "tier_missing";
+    }
+    if (isBlank(record.getPayload())) {
+      return "payload_missing";
+    }
+    if (isBlank(record.getIngestDate())) {
+      return "ingest_date_missing";
+    }
+    try {
+      LocalDate.parse(record.getIngestDate());
+    } catch (DateTimeParseException e) {
+      return "ingest_date_invalid";
+    }
+    Long rawLogSize = record.getRawLogSize();
+    if (rawLogSize != null && rawLogSize < 0) {
+      return "raw_log_size_negative";
+    }
+    return null;
+  }
+
+  public static DeadletterRecord deadletter(Paso1Record record, String reason) {
     return new DeadletterRecord(
         record.getSourceFile(),
         null,
@@ -65,6 +63,10 @@ public class ValidateRecordFn extends DoFn<Paso1Record, Paso1Record> {
         Instant.now().toString(),
         record.getPayload()
     );
+  }
+
+  private DeadletterRecord buildDead(Paso1Record record, String reason) {
+    return deadletter(record, reason);
   }
 
   private static boolean isBlank(String value) {
