@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public final class Paso1RecordMapper {
+  private static final ZoneId INGEST_DATE_ZONE = ZoneId.of("America/Mexico_City");
   private static final DateTimeFormatter FLEXIBLE_TS = new DateTimeFormatterBuilder()
       .appendPattern("yyyy-MM-dd HH:mm:ss")
       .optionalStart()
@@ -59,7 +60,7 @@ public final class Paso1RecordMapper {
 
   public static Paso1Record fromJson(JsonNode node, String source) throws Exception {
     String line = node.toString();
-    RawPayload obj = MAPPER.readValue(line, RawPayload.class);
+    RawPayload obj = MAPPER.treeToValue(node, RawPayload.class);
     return buildRecord(obj, source, line);
   }
 
@@ -68,18 +69,7 @@ public final class Paso1RecordMapper {
     String ingestTime = parseTs(textOf(obj.ingestTime));
     String collectorTs = parseTs(textOf(obj.collectorTimestamp));
     String rowCreateTime = parseTs(textOf(obj.rowCreateTime));
-    String ingestDate = null;
-    if (ingestTime != null && ingestTime.length() >= 10) {
-      ingestDate = ingestTime.substring(0, 10);
-    } else if (collectorTs != null) {
-      try {
-        ingestDate = Instant.parse(collectorTs)
-            .atZone(ZoneId.of("America/Mexico_City"))
-            .toLocalDate()
-            .toString();
-      } catch (DateTimeParseException ignored) {
-      }
-    }
+    String ingestDate = deriveIngestDate(ingestTime, collectorTs);
 
     Long rawLogSize = null;
     String rawLogSizeText = textOf(obj.rawLogSize);
@@ -156,6 +146,22 @@ public final class Paso1RecordMapper {
     return null;
   }
 
+  private static String deriveIngestDate(String ingestTime, String collectorTs) {
+    if (ingestTime != null && ingestTime.length() >= 10) {
+      return ingestTime.substring(0, 10);
+    }
+    if (collectorTs != null) {
+      try {
+        return Instant.parse(collectorTs)
+            .atZone(INGEST_DATE_ZONE)
+            .toLocalDate()
+            .toString();
+      } catch (DateTimeParseException ignored) {
+      }
+    }
+    return null;
+  }
+
   private static String textOf(Object val) {
     if (val == null) return null;
     return String.valueOf(val);
@@ -174,11 +180,15 @@ public final class Paso1RecordMapper {
       List<?> list = (List<?>) val;
       List<String> out = new ArrayList<>(list.size());
       for (Object item : list) {
-        out.add(item == null ? null : String.valueOf(item));
+        String text = item == null ? null : String.valueOf(item).trim();
+        if (text != null && !text.isEmpty()) {
+          out.add(text);
+        }
       }
       return out;
     }
-    return Collections.singletonList(String.valueOf(val));
+    String text = String.valueOf(val).trim();
+    return text.isEmpty() ? Collections.emptyList() : Collections.singletonList(text);
   }
   
   private static String jsonOf(Object val) {

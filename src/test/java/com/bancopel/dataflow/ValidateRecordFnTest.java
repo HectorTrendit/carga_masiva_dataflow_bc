@@ -22,9 +22,9 @@ public class ValidateRecordFnTest {
 
   @Test
   public void validatesPayloadAndIngestDate() {
-    Paso1Record ok = record("1", "2025-07-27", "{\"ok\":true}");
-    Paso1Record missingPayload = record("2", "2025-07-27", "");
-    Paso1Record invalidDate = record("3", "2025-99-99", "{\"bad\":true}");
+    Paso1Record ok = record("1", "Tier 4", "2025-07-27", "{\"ok\":true}");
+    Paso1Record missingPayload = record("2", "Tier 4", "2025-07-27", "");
+    Paso1Record invalidDate = record("3", "Tier 4", "2025-99-99", "{\"bad\":true}");
 
     PCollectionTuple out = pipeline
         .apply(Create.of(ok, missingPayload, invalidDate))
@@ -55,7 +55,43 @@ public class ValidateRecordFnTest {
     pipeline.run().waitUntilFinish();
   }
 
+  @Test
+  public void rejectsMissingRequiredFieldsAndNegativeSizes() {
+    Paso1Record missingId = record(null, "Tier 4", "2025-07-27", "{\"ok\":true}");
+    Paso1Record missingTier = record("2", null, "2025-07-27", "{\"ok\":true}");
+    Paso1Record negativeSize = record("3", "Tier 4", "2025-07-27", "{\"ok\":true}", -1L);
+
+    PCollectionTuple out = pipeline
+        .apply(Create.of(missingId, missingTier, negativeSize))
+        .apply(ParDo.of(new ValidateRecordFn(TestTags.DEAD))
+            .withOutputTags(TestTags.MAIN, TupleTagList.of(TestTags.DEAD)));
+
+    PAssert.that(out.get(TestTags.MAIN)).empty();
+
+    PAssert.that(out.get(TestTags.DEAD)).satisfies(records -> {
+      List<String> errors = new ArrayList<>();
+      for (DeadletterRecord r : records) {
+        errors.add(r.getError());
+      }
+      assertEquals(3, errors.size());
+      assertTrue(errors.contains("id_missing"));
+      assertTrue(errors.contains("tier_missing"));
+      assertTrue(errors.contains("raw_log_size_negative"));
+      return null;
+    });
+
+    pipeline.run().waitUntilFinish();
+  }
+
   private Paso1Record record(String id, String ingestDate, String payload) {
+    return record(id, "Tier 4", ingestDate, payload);
+  }
+
+  private Paso1Record record(String id, String tier, String ingestDate, String payload) {
+    return record(id, tier, ingestDate, payload, null);
+  }
+
+  private Paso1Record record(String id, String tier, String ingestDate, String payload, Long rawLogSize) {
     return new Paso1Record(
         id,
         null,
@@ -63,8 +99,8 @@ public class ValidateRecordFnTest {
         ingestDate,
         null,
         null,
-        null,
-        null,
+        tier,
+        rawLogSize,
         null,
         Collections.emptyList(),
         Collections.emptyList(),

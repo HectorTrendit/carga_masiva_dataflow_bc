@@ -14,14 +14,9 @@ import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.Method;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.transforms.Flatten;
 import org.apache.beam.sdk.transforms.MapElements;
-import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.sdk.values.PCollectionList;
 import org.apache.beam.sdk.values.PCollectionTuple;
-import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.sdk.values.TupleTagList;
 import org.apache.beam.sdk.values.TypeDescriptor;
 import org.apache.beam.sdk.values.TypeDescriptors;
 
@@ -173,21 +168,8 @@ public class LoadBigQueryPipeline {
     PCollection<Paso1Record> main = parsed.get(parseAndValidate.getMainTag());
     PCollection<DeadletterRecord> deadletters = parsed.get(parseAndValidate.getDeadTag());
 
-    TupleTag<Paso1Record> schemaMainTag = new TupleTag<Paso1Record>() {
-    };
-    TupleTag<DeadletterRecord> schemaDeadTag = new TupleTag<DeadletterRecord>() {
-    };
-    PCollectionTuple schemaChecked = main.apply("CheckSchema",
-        ParDo.of(new CheckSchemaFn(schemaDeadTag, expectedFieldOrder()))
-            .withOutputTags(schemaMainTag, TupleTagList.of(schemaDeadTag)));
-
-    PCollection<Paso1Record> clean = schemaChecked.get(schemaMainTag);
-    deadletters = PCollectionList.of(deadletters)
-        .and(schemaChecked.get(schemaDeadTag))
-        .apply("MergeAllDeadletters", Flatten.pCollections());
-
     if (localOutput) {
-      clean
+      main
           .apply("LocalToJson", MapElements.into(TypeDescriptors.strings())
               .via((Paso1Record r) -> {
                 try {
@@ -200,7 +182,7 @@ public class LoadBigQueryPipeline {
               .to(options.getLocalOutput())
               .withSuffix(".jsonl"));
     } else {
-      clean
+      main
           .apply("ToTableRow", MapElements.into(TypeDescriptor.of(TableRow.class))
               .via(Paso1Record::toTableRow))
           .apply("WriteBQ", BigQueryIO.writeTableRows()
