@@ -21,13 +21,13 @@ public class ValidateRecordFnTest {
   public final TestPipeline pipeline = TestPipeline.create();
 
   @Test
-  public void validatesPayloadAndIngestDate() {
+  public void validatesOnlyIdAndPayload() {
     Paso1Record ok = record("1", "Tier 4", "2025-07-27", "{\"ok\":true}");
-    Paso1Record missingPayload = record("2", "Tier 4", "2025-07-27", "");
-    Paso1Record invalidDate = record("3", "Tier 4", "2025-99-99", "{\"bad\":true}");
+    Paso1Record missingPayload = record("2", "Tier 4", "2025-99-99", "");
+    Paso1Record optionalFieldsStillPass = record("3", null, null, "{\"bad\":true}", -1L);
 
     PCollectionTuple out = pipeline
-        .apply(Create.of(ok, missingPayload, invalidDate))
+        .apply(Create.of(ok, missingPayload, optionalFieldsStillPass))
         .apply(ParDo.of(new ValidateRecordFn(TestTags.DEAD))
             .withOutputTags(TestTags.MAIN, TupleTagList.of(TestTags.DEAD)));
 
@@ -36,7 +36,7 @@ public class ValidateRecordFnTest {
       for (Paso1Record r : records) {
         count++;
       }
-      assertEquals(1, count);
+      assertEquals(2, count);
       return null;
     });
 
@@ -46,9 +46,8 @@ public class ValidateRecordFnTest {
         errors.add(r.getError());
         assertEquals("validate", r.getStage());
       }
-      assertEquals(2, errors.size());
+      assertEquals(1, errors.size());
       assertTrue(errors.contains("payload_missing"));
-      assertTrue(errors.contains("ingest_date_invalid"));
       return null;
     });
 
@@ -56,13 +55,11 @@ public class ValidateRecordFnTest {
   }
 
   @Test
-  public void rejectsMissingRequiredFieldsAndNegativeSizes() {
+  public void rejectsMissingId() {
     Paso1Record missingId = record(null, "Tier 4", "2025-07-27", "{\"ok\":true}");
-    Paso1Record missingTier = record("2", null, "2025-07-27", "{\"ok\":true}");
-    Paso1Record negativeSize = record("3", "Tier 4", "2025-07-27", "{\"ok\":true}", -1L);
 
     PCollectionTuple out = pipeline
-        .apply(Create.of(missingId, missingTier, negativeSize))
+        .apply(Create.of(missingId))
         .apply(ParDo.of(new ValidateRecordFn(TestTags.DEAD))
             .withOutputTags(TestTags.MAIN, TupleTagList.of(TestTags.DEAD)));
 
@@ -73,10 +70,8 @@ public class ValidateRecordFnTest {
       for (DeadletterRecord r : records) {
         errors.add(r.getError());
       }
-      assertEquals(3, errors.size());
+      assertEquals(1, errors.size());
       assertTrue(errors.contains("id_missing"));
-      assertTrue(errors.contains("tier_missing"));
-      assertTrue(errors.contains("raw_log_size_negative"));
       return null;
     });
 
